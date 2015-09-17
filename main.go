@@ -134,6 +134,94 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 //	fmt.Fprint(w, string(response))
 	return
 }
+func GetFollowers(user_id, offset string) string {
+	rand.Seed(time.Now().UTC().UnixNano())
+	token := tokens[rand.Intn(len(tokens))]
+	code := `
+        var users = []; var offset = ` + offset + `; var start_offset = ` + offset + `; var count = 1000; var iteration = 1; var totalUsers = 0;
+        var rq = API.users.getFollowers({
+                "user_id": "` + user_id + `",
+                "v": "5.28", "count": count, "offset": offset
+            });
+        offset=offset+count;
+        users = users + rq.items;
+        var accounted = rq.items.length;
+        totalUsers = rq.count;
+        while(totalUsers > 0 && totalUsers > accounted && iteration <= 24){
+            rq = API.users.getFollowers({
+                "user_id": "` + user_id + `",
+                "v": "5.37", "count": count, "offset": offset
+            });
+            users = users + rq.items;
+            offset=offset+count;
+            accounted = accounted + rq.items.length;
+            iteration = iteration + 1;
+            totalUsers = rq.count;
+        }
+        if(parseInt(totalUsers)==0 && totalUsers+"" == ""){
+            return {
+                "error": {
+                    "error_code": 0
+                }
+            };
+        }
+        return {
+            "users": users,
+            "total": totalUsers,
+            "offset": start_offset,
+            "count": users.length,
+        };
+        `
+
+	baseUrl, err := url.Parse("https://api.vk.com/method/execute")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	params := url.Values{}
+	params.Add("code", code)
+	params.Add("access_token", token)
+
+	baseUrl.RawQuery = params.Encode()
+	fmt.Println(baseUrl)
+
+	res, err := http.Get(baseUrl.String())
+
+	if err != nil {
+		log.Print(err)
+	}
+	response, err := ioutil.ReadAll(res.Body)
+	res.Body.Close()
+	if err != nil {
+		log.Print(err)
+	}
+
+	return string(response)
+}
+
+func GetFollowersSimple(user_id, offset string) (resp string, err error) {
+	timeout := time.Duration(15 * time.Second)
+	client := http.Client{
+		Timeout: timeout,
+		Transport: &http.Transport{
+			ResponseHeaderTimeout: timeout,
+			TLSHandshakeTimeout:   15 * time.Second,
+			MaxIdleConnsPerHost:   10000,
+		},
+	}
+	res, err := client.Get("https://api.vk.com/method/users.getFollowers?user_id=" +user_id+ "&v=5.37&count=1000" + "&offset=" + offset)
+
+	if err != nil {
+		return
+	}
+	response, err := ioutil.ReadAll(res.Body)
+	res.Body.Close()
+	if err != nil {
+		return
+	}
+
+	return string(response), nil
+}
 
 func main() {
 	http.DefaultTransport.(*http.Transport).MaxIdleConnsPerHost = 500
