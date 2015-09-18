@@ -200,13 +200,13 @@ func GetFollowers(user_id, offset string) string {
 }
 
 func GetFollowersSimple(user_id, offset string) (resp string, err error) {
-	timeout := time.Duration(15 * time.Second)
+	timeout := time.Duration(5 * time.Second)
 	client := http.Client{
 		Timeout: timeout,
 		Transport: &http.Transport{
 			ResponseHeaderTimeout: timeout,
-			TLSHandshakeTimeout:   15 * time.Second,
-			MaxIdleConnsPerHost:   10000,
+			TLSHandshakeTimeout:   5 * time.Second,
+			MaxIdleConnsPerHost:   100,
 		},
 	}
 	res, err := client.Get("https://api.vk.com/method/users.getFollowers?user_id=" +user_id+ "&v=5.37&count=1000" + "&offset=" + offset)

@@ -43,17 +43,18 @@ func TestParallelism (t *testing.T) {
 
 	ch := make(chan string)
 	for i := 1;  i<=count / 1000; i++ {
-		if i % 500 == 0 {
-			time.Sleep(500 * time.Millisecond)
-		}
+
+		time.Sleep(1 * time.Millisecond)
 		go func(user_id string, i int) {
-//			for z := 1;  z<= 3; z++ {
+			for z := 1;  z<= 50; z++ {
 				res, err := GetFollowersSimple(user_id, strconv.Itoa(i * 1000))
 				if (err == nil) {
 					ch <- res
+					return
 				}
-//				time.Sleep(time.Duration(z) * time.Second)
-//			}
+				time.Sleep(1 * time.Millisecond)
+			}
+			return
 		}(user_id, i)
 	}
 
@@ -65,7 +66,7 @@ func TestParallelism (t *testing.T) {
 			case  <-ch:
 				cnt++
 				fmt.Println(cnt)
-			case <-time.After(20 * time.Second):
+			case <-time.After(30 * time.Second):
 				break Loop
 			}
 		}
