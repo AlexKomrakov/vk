@@ -8,8 +8,10 @@ import (
 	"io/ioutil"
 //    "strings"
 	"math/rand"
+	"net"
 	"strconv"
 	"net/url"
+	"crypto/tls"
 )
 
 var tokens = []string{""}
@@ -201,16 +203,26 @@ func GetFollowers(user_id, offset string) string {
 
 func GetFollowersSimple(user_id, offset string) (resp string, err error) {
 	timeout := time.Duration(5 * time.Second)
+	dialer := &net.Dialer{
+		LocalAddr: &net.TCPAddr{IP: net.IPAddr{IP: net.IPv4zero}.IP, Zone: net.IPAddr{IP: net.IPv4zero}.Zone},
+		KeepAlive: 30 * time.Second,
+		Timeout:   timeout,
+	}
 	client := http.Client{
-		Timeout: timeout,
 		Transport: &http.Transport{
+			Proxy: http.ProxyFromEnvironment,
+			Dial: dialer.Dial,
 			ResponseHeaderTimeout: timeout,
 			TLSHandshakeTimeout:   5 * time.Second,
-			MaxIdleConnsPerHost:   1000,
+			MaxIdleConnsPerHost:   10000,
+			TLSClientConfig: &tls.Config{
+				InsecureSkipVerify: true,
+			},
 		},
 	}
-	res, err := client.Get("https://api.vk.com/method/users.getFollowers?user_id=" +user_id+ "&v=5.37&count=1000" + "&offset=" + offset)
+	res, err := client.Get("https://api.vk.com/method/users.getFollowers?user_id=" +user_id+ "&v=5.37&access_token=4150078057cc11e9b316c5e60a0146147dad1c8b8e9486d18352f3eea57472a9eea676e308c69fc3aca85&count=1000" + "&offset=" + offset)
 	if err != nil {
+		//fmt.Println(err.Error())
 		return
 	}
 	defer res.Body.Close()

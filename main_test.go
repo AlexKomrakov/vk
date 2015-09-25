@@ -71,9 +71,6 @@ func TestParallelism (t *testing.T) {
 				errors++
 			case <-ticker.C:
 				fmt.Printf("Всего %d / Ошибок/сек %d (%d записей/сек) \n", cnt, errors, count/10)
-//				fmt.Println(cnt)
-//				fmt.Println(count/10)
-//				fmt.Println(errors)
 				count = 0
 				errors = 0
 			case <-time.After(30 * time.Second):
