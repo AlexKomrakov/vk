@@ -206,16 +206,17 @@ func GetFollowersSimple(user_id, offset string) (resp string, err error) {
 		Transport: &http.Transport{
 			ResponseHeaderTimeout: timeout,
 			TLSHandshakeTimeout:   5 * time.Second,
-			MaxIdleConnsPerHost:   100,
+			MaxIdleConnsPerHost:   1000,
 		},
 	}
 	res, err := client.Get("https://api.vk.com/method/users.getFollowers?user_id=" +user_id+ "&v=5.37&count=1000" + "&offset=" + offset)
-
 	if err != nil {
 		return
 	}
+	defer res.Body.Close()
+
 	response, err := ioutil.ReadAll(res.Body)
-	res.Body.Close()
+
 	if err != nil {
 		return
 	}
