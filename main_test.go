@@ -4,30 +4,10 @@ import (
     "time"
     "fmt"
     "testing"
-    vegeta "github.com/tsenart/vegeta/lib"
 	"regexp"
 	"strconv"
 )
 
-
-func TestMain(t *testing.T) {
-    rate := uint64(1000) // per second
-    duration := 30 * time.Second
-    targeter := vegeta.NewStaticTargeter(vegeta.Target{
-        Method: "GET",
-        URL:    "http://api.vk.com/method/users.get?user_id=1&v=5.37",
-    })
-    attacker := vegeta.NewAttacker(vegeta.Timeout(5 * time.Second))
-
-    var results vegeta.Results
-    for res := range attacker.Attack(targeter, rate, duration) {
-        results = append(results, res)
-    }
-
-    metrics := vegeta.NewMetrics(results)
-    fmt.Println(metrics)
-    fmt.Printf("99th percentile: %s\n", metrics.Latencies.P99)
-}
 
 func TestParallelism (t *testing.T) {
 	ticker := time.NewTicker(time.Duration(10) * time.Second)
@@ -56,13 +36,13 @@ func TestParallelism (t *testing.T) {
 	}
 
 	fmt.Println("Waiting To Finish")
-	errors, cnt, count := 0, 0, 0
+	errors, cnt, count_st := 0, 0, 0
 	Loop:
 		for {
 			select {
 			case  <-res_ch:
 				cnt++
-				count++
+				count_st++
 //				fmt.Println(cnt)
 				if cnt == count / 1000 {
 					break Loop
@@ -70,8 +50,8 @@ func TestParallelism (t *testing.T) {
 			case <-err_ch:
 				errors++
 			case <-ticker.C:
-				fmt.Printf("Всего %d / Ошибок/сек %d (%d записей/сек) \n", cnt, errors, count/10)
-				count = 0
+				fmt.Printf("Всего %d / Ошибок/сек %d (%d записей/сек) \n", cnt, errors, count_st/10)
+				count_st = 0
 				errors = 0
 			case <-time.After(30 * time.Second):
 				break Loop
@@ -86,7 +66,7 @@ func TestParallelism (t *testing.T) {
 
 func grabber(c chan int, ch_res chan string, err_ch chan int) {
 	fmt.Println("Starting grabber")
-	for i := 0; i < 500; i++ {
+	for i := 0; i < 1000; i++ {
 		go func() {
 			for {
 				select {
