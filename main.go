@@ -12,16 +12,102 @@ import (
 	"strconv"
 	"net/url"
 	//"crypto/tls"
+	"encoding/json"
+	"errors"
 )
 
-var tokens = []string{""}
-var words = []string{"увещевательный", "подличать", "скатерка", "пропихивать", "сыродельня", "отпасти", "дымоотводный"}
+var (
+	TOKENS = []string{""}
+	WORDS  = []string{"увещевательный", "подличать", "скатерка", "пропихивать", "сыродельня", "отпасти", "дымоотводный"}
+)
+
+type GetMembersStruct struct {
+	Response GetMembersResponse `json:"response"`
+}
+
+type GetMembersResponse struct {
+	Items []User   `json:"items"`
+	ItemsCount int `json:"items_count"`
+	TotalCount int `json:"total_count"`
+}
+
+func GetToken() string {
+	rand.Seed(time.Now().UTC().UnixNano())
+	return TOKENS[rand.Intn(len(TOKENS))]
+}
+
+type GroupRequest struct {
+	Name   string
+	Offset string
+}
+
+func GroupsGetMembers(req GroupRequest) (result GetMembersStruct, err error)  {
+	u      := "https://api.vk.com/method/execute"
+	token  := GetToken()
+	count  := "1000"
+	v      := "5.37"
+	fields := "sex, status, contacts, city, bdate"
+	code  := `
+        var count = `+ count +`, v = "` + v + `", offset = ` + req.Offset+ `, group_id = "` + req.Name + `", fields = "` + fields + `", iteration = 1, result;
+        var res = API.groups.getMembers({
+                "v": v,
+                "count": count,
+                "group_id": group_id,
+                "fields": fields,
+                "offset": offset
+            });
+		result = {
+			"items": res.items,
+			"items_count": res.items.length,
+			"total_count": res.count,
+		};
+		while(result.total_count > result.items_count + offset && iteration < 25) {
+			iteration = iteration + 1;
+            var res = API.groups.getMembers({
+                "v": v,
+                "count": count,
+                "offset": offset + result.items_count,
+                "group_id": group_id,
+				"fields": fields
+            });
+            result.items       = result.items + res.items;
+            result.items_count = result.items.length;
+			result.total_count = res.count;
+        }
+        return result;
+        `
+
+	query := url.Values{"access_token" : []string{token}, "code" : []string{code}}
+	res, err := http.Get(u + "?" + query.Encode())
+	if err != nil {
+		return
+	}
+	defer res.Body.Close()
+
+	body, err := ioutil.ReadAll(res.Body)
+	if err != nil {
+		return
+	}
+
+	err = json.Unmarshal(body, &result)
+	if err != nil {
+		return
+	}
+
+	if result.Response.ItemsCount == 0 {
+		return result, errors.New("Empty result")
+	}
+
+	return
+}
+
+
 
 type Handler struct {}
 
 func NewsfeedSearch(q string) {
-	u := "https://api.vk.com/method/execute"
-	code := `
+	u     := "https://api.vk.com/method/execute"
+	code  := `
         var count = 200, v = "5.37", iteration = 1, result;
         var rq = API.newsfeed.search({
                 "q": "` + q + `",
@@ -50,8 +136,7 @@ func NewsfeedSearch(q string) {
         return result;
         `
 
-	rand.Seed(time.Now().UTC().UnixNano())
-	token := tokens[rand.Intn(len(tokens))]
+	token := GetToken()
 
 	qq := url.Values{}
 	qq.Set("access_token", token)
@@ -73,8 +158,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	uri := r.URL.Path
 	q := r.URL.Query()
-	rand.Seed(time.Now().UTC().UnixNano())
-	token := tokens[rand.Intn(len(tokens))]
+	token := GetToken()
 	q.Set("access_token", token)
 //	word := words[rand.Intn(len(words))]
 	user_id := strconv.Itoa(rand.Intn(6000000))
@@ -137,8 +221,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	return
 }
 func GetFollowers(user_id, offset string) string {
-	rand.Seed(time.Now().UTC().UnixNano())
-	token := tokens[rand.Intn(len(tokens))]
+	token := GetToken()
 	code := `
         var users = []; var offset = ` + offset + `; var start_offset = ` + offset + `; var count = 1000; var iteration = 1; var totalUsers = 0;
         var rq = API.users.getFollowers({

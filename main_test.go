@@ -6,8 +6,41 @@ import (
     "testing"
 	"regexp"
 	"strconv"
+	"gopkg.in/mgo.v2"
 )
 
+var session *mgo.Session
+
+func Init() {
+	sess, err := mgo.Dial("127.0.0.1")
+	if err != nil {
+		panic(err)
+	}
+	session = sess
+}
+
+func grabber(c chan int, ch_res chan string, err_ch chan int) {
+	fmt.Println("Starting grabber")
+	for i := 0; i < 1000; i++ {
+		go func() {
+			for {
+				select {
+				case val:= <-c:
+					res, err := GetFollowersSimple("1", strconv.Itoa(val))
+					if err != nil {
+						c <- val
+						err_ch <- 1
+					} else {
+						ch_res <- res
+					}
+				case <-time.After(5 * time.Second):
+					fmt.Print("Break")
+					break
+				}
+			}
+		} ()
+	}
+}
 
 func TestParallelism (t *testing.T) {
 	ticker := time.NewTicker(time.Duration(10) * time.Second)
@@ -64,32 +97,88 @@ func TestParallelism (t *testing.T) {
 	fmt.Printf("Took %s\n", elapsed)
 }
 
-func grabber(c chan int, ch_res chan string, err_ch chan int) {
-	fmt.Println("Starting grabber")
+func GMGrabbers(c chan GroupRequest, ch_res chan GetMembersStruct, err_ch chan int) {
+	fmt.Println("Starting grabbers")
 	for i := 0; i < 1000; i++ {
 		go func() {
 			for {
 				select {
-				case val:= <-c:
-					res, err := GetFollowersSimple("1", strconv.Itoa(val))
+				case request:= <-c:
+					res, err := GroupsGetMembers(request)
 					if err != nil {
-						c <- val
+						c <- request
 						err_ch <- 1
 					} else {
 						ch_res <- res
 					}
-				case <-time.After(5 * time.Second):
-					fmt.Print("Break")
-					break
 				}
 			}
 		} ()
 	}
 }
 
+func TestGetGroupMembers(t *testing.T) {
+	Init()
 
-func TestGo(t *testing.T) {
-	ch := make(chan int) //создаем канал для передачи целых чисел (int)
-	b:= <-ch   //читаем число из канала
-	fmt.Println(b)
+	results_ch := make(chan GetMembersStruct, 200)
+	request_ch := make(chan GroupRequest, 500)
+	errors_ch  := make(chan int, 10)
+
+	GMGrabbers(request_ch, results_ch, errors_ch)
+
+	group_name := "strategicmusic"
+
+	fmt.Println("Initial request")
+	result, err := GroupsGetMembers(GroupRequest{group_name, "0"})
+	if err != nil {
+		panic(err)
+	}
+	results_ch <- result
+
+	sent := 1
+	fmt.Println(result.Response.TotalCount)
+	for offset := 25000; offset < result.Response.TotalCount; offset += 25000 {
+		sent++
+		fmt.Println("Request with offset: " + strconv.Itoa(offset))
+		request_ch <- GroupRequest{group_name, strconv.Itoa(offset)}
+	}
+
+	ticker := time.NewTicker(time.Duration(10) * time.Second)
+	defer ticker.Stop()
+
+	errors, cnt, count_st := 0, 0, 0
+	Loop:
+	for {
+		select {
+		case result := <-results_ch:
+			cnt++
+			count_st++
+			_, err = SaveInDB("vk", group_name, result.Response.Items)
+			if err != nil {
+				panic(err)
+			}
+
+			if (cnt == sent) {
+				fmt.Println("Finish")
+				break Loop
+			}
+		case <-errors_ch:
+			errors++
+		case <-ticker.C:
+			fmt.Printf("Всего %d / Ошибок/сек %d (%d записей/сек) \n", cnt, errors, count_st / 10)
+			count_st = 0
+			errors = 0
+		}
+	}
+
+	fmt.Println("Done")
+}
+
+func SaveInDB(db, col string, data []User) (*mgo.BulkResult, error) {
+	b := session.DB(db).C(col).Bulk()
+	for _, val := range data {
+		b.Insert(val)
+	}
+
+	return b.Run()
 }
